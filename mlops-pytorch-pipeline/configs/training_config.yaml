@@ -1,0 +1,16 @@
+dataset:
+  name: CIFAR10
+  root: ./data
+  batch_size: 64
+  num_workers: 2
+
+training:
+  epochs: 20
+  learning_rate: 0.001
+  early_stopping_patience: 5
+
+model:
+  num_classes: 10
+
+output:
+  checkpoint_path: checkpoints/resnet18_cifar10.pth
