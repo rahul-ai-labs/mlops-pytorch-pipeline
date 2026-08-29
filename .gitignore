@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+
+# Training data
+src/data/
+
+# Model checkpoints
+src/checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+
+# other model train files
+*.pth
+*.pt
+__pycache__/
+*.pyc
