@@ -1,0 +1,14 @@
+numpy
+pandas
+matplotlib
+Pillow
+PyYAML
+
+# API
+fastapi
+uvicorn
+
+# Testing
+pytest
+
+python-multipart
