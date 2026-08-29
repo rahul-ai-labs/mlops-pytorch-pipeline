@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 from torchvision import transforms
 
-from model import get_model
+from src.model import get_model
 
 
 # ---------------------------------------------------------
