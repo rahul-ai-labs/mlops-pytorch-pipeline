@@ -1,9 +1,3 @@
-dataset:
-  name: CIFAR10
-  root: ./data
-  batch_size: 64
-  num_workers:
-
 model:
   architecture: resnet18
   num_classes: 10
