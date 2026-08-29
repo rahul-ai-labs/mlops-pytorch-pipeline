@@ -1,13 +1,14 @@
 import json
 from pathlib import Path
-
+import os
+from pathlib import Path
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import yaml
 
-from dataset import get_dataloaders
-from model import get_model
+from src.dataset import get_dataloaders
+from src.model import get_model
 
 
 def load_config(config_path: str) -> dict:
@@ -325,24 +326,24 @@ def main():
 
     project_root = Path(__file__).resolve().parent.parent
 
-    docker_config_path = Path(
+
+    docker_config_path_default_str = Path(
         "/app/configs/training_config.yaml"
     )
 
-    local_config_path = (
-        project_root
-        / "configs"
-        / "training_config.yaml"
+    docker_config_path = Path(
+        os.getenv("CONFIG_PATH", docker_config_path_default_str
+        )
     )
+
+    local_config_path = project_root/ "configs"/ "training_config.yaml"
 
     if docker_config_path.exists():
         config_path = docker_config_path
     else:
         config_path = local_config_path
 
-    config = load_config(
-        str(config_path)
-    )
+    config = load_config(str(config_path))
 
     # ---------------------------------------------------------
     # Device

@@ -211,7 +211,7 @@ def health():
 
 @app.post("/predict")
 async def predict(
-    file: UploadFile = File(...),
+    image: UploadFile = File(...),
 ):
     if not MODEL_LOADED or model is None:
         raise HTTPException(
@@ -223,8 +223,8 @@ async def predict(
     # Validate file type
     # -----------------------------------------------------
 
-    if file.content_type is not None:
-        if not file.content_type.startswith("image/"):
+    if image.content_type is not None:
+        if not image.content_type.startswith("image/"):
             raise HTTPException(
                 status_code=400,
                 detail="Uploaded file must be an image",
@@ -235,7 +235,7 @@ async def predict(
     # -----------------------------------------------------
 
     try:
-        image_bytes = await file.read()
+        image_bytes = await image.read()
 
         if not image_bytes:
             raise HTTPException(

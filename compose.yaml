@@ -1,0 +1,45 @@
+networks:
+  mlops-net:
+    driver: bridge
+
+services:
+  train:
+    image: ghcr.io/rahul-ai-labs/mlops-pytorch-train:latest
+    container_name: mlops-rahul-pytorch-train
+
+    environment:
+      CONFIG_PATH: /app/configs/training_config.yaml
+      PYTHONPATH: /app
+
+    volumes:
+      - ./src:/app/src:ro
+      - ./configs:/app/configs:ro
+      - ./data:/app/data
+      - ./checkpoints:/app/checkpoints
+
+    networks:
+      - mlops-net
+
+    profiles:
+      - training
+
+
+  predict:
+    image: ghcr.io/rahul-ai-labs/mlops-pytorch-predict:latest
+    container_name: mlops-rahul-pytorch-predict
+
+    restart: unless-stopped
+
+    environment:
+      PYTHONPATH: /app
+
+    ports:
+      - "6094:8080"
+
+    volumes:
+      - ./src:/app/src:ro
+      - ./configs:/app/configs:ro
+      - ./checkpoints:/app/checkpoints:ro
+
+    networks:
+      - mlops-net
