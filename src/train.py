@@ -470,54 +470,59 @@ def main():
     best_val_loss = float("inf")
     patience_counter = 0
 
-    latest_checkpoint = find_latest_checkpoint(
-        checkpoint_dir
+    resume_training = config["training"].get(
+        "resume",
+        False,
     )
 
-    if latest_checkpoint is not None:
-        print(
-            json.dumps({
-                "event": "checkpoint_found",
-                "path": str(latest_checkpoint),
-            }),
-            flush=True,
+    if resume_training:
+        latest_checkpoint = find_latest_checkpoint(
+            checkpoint_dir
         )
 
-        checkpoint = torch.load(
-            latest_checkpoint,
-            map_location=device,
-        )
+        if latest_checkpoint is not None:
+            print(
+                json.dumps({
+                    "event": "checkpoint_found",
+                    "path": str(latest_checkpoint),
+                }),
+                flush=True,
+            )
 
-        model.load_state_dict(
-            checkpoint["model_state_dict"]
-        )
+            checkpoint = torch.load(
+                latest_checkpoint,
+                map_location=device,
+            )
 
-        optimizer.load_state_dict(
-            checkpoint["optimizer_state_dict"]
-        )
+            model.load_state_dict(
+                checkpoint["model_state_dict"]
+            )
 
-        start_epoch = checkpoint["epoch"]
+            optimizer.load_state_dict(
+                checkpoint["optimizer_state_dict"]
+            )
 
-        best_val_loss = checkpoint.get(
-            "best_val_loss",
-            float("inf"),
-        )
+            start_epoch = checkpoint["epoch"]
 
-        patience_counter = checkpoint.get(
-            "patience_counter",
-            0,
-        )
+            best_val_loss = checkpoint.get(
+                "best_val_loss",
+                float("inf"),
+            )
 
-        print(
-            json.dumps({
-                "event": "training_resumed",
-                "checkpoint": str(latest_checkpoint),
-                "last_completed_epoch": start_epoch,
-                "next_epoch": start_epoch + 1,
-            }),
-            flush=True,
-        )
+            patience_counter = checkpoint.get(
+                "patience_counter",
+                0,
+            )
 
+            print(
+                json.dumps({
+                    "event": "training_resumed",
+                    "checkpoint": str(latest_checkpoint),
+                    "last_completed_epoch": start_epoch,
+                    "next_epoch": start_epoch + 1,
+                }),
+                flush=True,
+            )
     # ---------------------------------------------------------
     # Training loop
     # ---------------------------------------------------------

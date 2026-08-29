@@ -1,8 +1,15 @@
+dataset:
+  name: CIFAR10
+  root: ./data
+  batch_size: 64
+  num_workers:
+
 model:
   architecture: resnet18
   num_classes: 10
 
 data:
+  dataset: CIFAR10
   data_dir: data
   num_workers: 0
 
@@ -11,14 +18,9 @@ training:
   batch_size: 64
   learning_rate: 0.001
   early_stopping_patience: 5
+  resume: true
 
 output:
   checkpoint_dir: checkpoints
-  checkpoint_every: 5
+  checkpoint_every: 1
   keep_last_checkpoints: 2
-
-dataset:
-  name: CIFAR10
-  root: ./data
-  batch_size: 64
-  num_workers: 2
