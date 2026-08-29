@@ -3,22 +3,18 @@ model:
   num_classes: 10
 
 data:
+  dataset: CIFAR10
   data_dir: data
   num_workers: 0
 
 training:
-  epochs: 20
+  epochs: 40
   batch_size: 64
   learning_rate: 0.001
   early_stopping_patience: 5
+  resume: false
 
 output:
   checkpoint_dir: checkpoints
-  checkpoint_every: 5
+  checkpoint_every: 1
   keep_last_checkpoints: 2
-
-dataset:
-  name: CIFAR10
-  root: ./data
-  batch_size: 64
-  num_workers: 2

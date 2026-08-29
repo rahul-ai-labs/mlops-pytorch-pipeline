@@ -11,15 +11,21 @@ from model import get_model
 
 
 def load_config(config_path: str) -> dict:
-    """Load YAML training configuration."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 
 def save_json(data, path: Path) -> None:
-    """Save Python data as formatted JSON."""
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
+
+def load_json(path: Path, default):
+    if not path.exists():
+        return default
+
+    with open(path, "r") as f:
+        return json.load(f)
 
 
 def train_one_epoch(
@@ -29,8 +35,6 @@ def train_one_epoch(
     criterion: nn.Module,
     device: torch.device,
 ) -> tuple[float, float]:
-    """Train the model for one epoch."""
-
     model.train()
 
     total_loss = 0.0
@@ -41,25 +45,16 @@ def train_one_epoch(
         inputs = inputs.to(device)
         targets = targets.to(device)
 
-        # Clear gradients from previous batch.
         optimizer.zero_grad()
 
-        # Forward pass.
         outputs = model(inputs)
-
-        # Calculate loss.
         loss = criterion(outputs, targets)
 
-        # Backpropagation.
         loss.backward()
-
-        # Update model parameters.
         optimizer.step()
 
-        # Accumulate loss.
         total_loss += loss.item() * inputs.size(0)
 
-        # Calculate predictions.
         _, predicted = outputs.max(1)
 
         total += targets.size(0)
@@ -78,8 +73,6 @@ def evaluate(
     criterion: nn.Module,
     device: torch.device,
 ) -> tuple[float, float]:
-    """Evaluate model without updating weights."""
-
     model.eval()
 
     total_loss = 0.0
@@ -106,63 +99,9 @@ def evaluate(
     return avg_loss, accuracy
 
 
-def save_periodic_checkpoint(
-    model: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    epoch: int,
-    metrics: dict,
-    best_val_loss: float,
-    patience_counter: int,
-    config: dict,
-    checkpoint_dir: Path,
-    keep_last: int,
-) -> Path:
-    """
-    Save a training checkpoint that can be used to resume training.
-
-    Only the most recent `keep_last` periodic checkpoints are retained.
-    """
-
-    checkpoint_path = (
-        checkpoint_dir / f"checkpoint_epoch_{epoch}.pt"
-    )
-
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "metrics": metrics,
-            "best_val_loss": best_val_loss,
-            "patience_counter": patience_counter,
-            "config": config,
-        },
-        checkpoint_path,
-    )
-
-    # Find all periodic checkpoints.
-    checkpoint_files = list(
-        checkpoint_dir.glob("checkpoint_epoch_*.pt")
-    )
-
-    # Sort by epoch number.
-    checkpoint_files.sort(
-        key=lambda path: int(
-            path.stem.split("_")[-1]
-        )
-    )
-
-    # Remove oldest checkpoints.
-    while len(checkpoint_files) > keep_last:
-        oldest_checkpoint = checkpoint_files.pop(0)
-        oldest_checkpoint.unlink()
-
-    return checkpoint_path
-
 def find_latest_checkpoint(
     checkpoint_dir: Path,
 ) -> Path | None:
-
     checkpoints = list(
         checkpoint_dir.glob("checkpoint_epoch_*.pt")
     )
@@ -178,6 +117,53 @@ def find_latest_checkpoint(
 
     return checkpoints[-1]
 
+
+def save_periodic_checkpoint(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    metrics: dict,
+    best_val_loss: float,
+    patience_counter: int,
+    config: dict,
+    checkpoint_dir: Path,
+    keep_last: int,
+) -> Path:
+    checkpoint_path = (
+        checkpoint_dir
+        / f"checkpoint_epoch_{epoch}.pt"
+    )
+
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "metrics": metrics,
+            "best_val_loss": best_val_loss,
+            "patience_counter": patience_counter,
+            "config": config,
+        },
+        checkpoint_path,
+    )
+
+    checkpoint_files = list(
+        checkpoint_dir.glob("checkpoint_epoch_*.pt")
+    )
+
+    checkpoint_files.sort(
+        key=lambda path: int(
+            path.stem.split("_")[-1]
+        )
+    )
+
+    while len(checkpoint_files) > keep_last:
+        oldest_checkpoint = checkpoint_files.pop(0)
+        oldest_checkpoint.unlink()
+
+    return checkpoint_path
+
+
 def save_best_model(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -186,8 +172,6 @@ def save_best_model(
     config: dict,
     checkpoint_dir: Path,
 ) -> None:
-    """Save the best performing model and its metrics."""
-
     best_model_path = checkpoint_dir / "best_model.pt"
     best_metrics_path = checkpoint_dir / "best_metrics.json"
 
@@ -216,8 +200,6 @@ def save_final_model(
     config: dict,
     checkpoint_dir: Path,
 ) -> None:
-    """Save model state and metrics from the final completed epoch."""
-
     final_model_path = checkpoint_dir / "final_model.pt"
     final_metrics_path = checkpoint_dir / "final_metrics.json"
 
@@ -242,8 +224,6 @@ def plot_loss(
     metrics_history: list[dict],
     output_dir: Path,
 ) -> None:
-    """Plot training and validation loss."""
-
     epochs = [
         metric["epoch"]
         for metric in metrics_history
@@ -278,14 +258,14 @@ def plot_loss(
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training and Validation Loss")
-
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
 
-    plot_path = output_dir / "loss_curve.png"
+    plt.savefig(
+        output_dir / "loss_curve.png"
+    )
 
-    plt.savefig(plot_path)
     plt.close()
 
 
@@ -293,19 +273,17 @@ def plot_accuracy(
     metrics_history: list[dict],
     output_dir: Path,
 ) -> None:
-    """Plot training and validation accuracy."""
-
     epochs = [
         metric["epoch"]
         for metric in metrics_history
     ]
 
-    train_accuracy = [
+    train_accuracies = [
         metric["train_accuracy"]
         for metric in metrics_history
     ]
 
-    val_accuracy = [
+    val_accuracies = [
         metric["val_accuracy"]
         for metric in metrics_history
     ]
@@ -314,14 +292,14 @@ def plot_accuracy(
 
     plt.plot(
         epochs,
-        train_accuracy,
+        train_accuracies,
         marker="o",
         label="Training Accuracy",
     )
 
     plt.plot(
         epochs,
-        val_accuracy,
+        val_accuracies,
         marker="o",
         label="Validation Accuracy",
     )
@@ -329,35 +307,38 @@ def plot_accuracy(
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy")
     plt.title("Training and Validation Accuracy")
-
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
 
-    plot_path = output_dir / "accuracy_curve.png"
+    plt.savefig(
+        output_dir / "accuracy_curve.png"
+    )
 
-    plt.savefig(plot_path)
     plt.close()
 
 
 def main():
     # ---------------------------------------------------------
-    # Configuration
+    # Project/config paths
     # ---------------------------------------------------------
 
-    # Docker path.
-    config_path = Path(
+    project_root = Path(__file__).resolve().parent.parent
+
+    docker_config_path = Path(
         "/app/configs/training_config.yaml"
     )
 
-    # Local development path.
-    if not config_path.exists():
-        project_root = Path(__file__).resolve().parent.parent
-        config_path = (
-            project_root
-            / "configs"
-            / "training_config.yaml"
-        )
+    local_config_path = (
+        project_root
+        / "configs"
+        / "training_config.yaml"
+    )
+
+    if docker_config_path.exists():
+        config_path = docker_config_path
+    else:
+        config_path = local_config_path
 
     config = load_config(
         str(config_path)
@@ -398,11 +379,18 @@ def main():
     ).to(device)
 
     # ---------------------------------------------------------
-    # Dataset
+    # Data paths
     # ---------------------------------------------------------
 
+    data_dir = Path(
+        config["data"]["data_dir"]
+    )
+
+    if not data_dir.is_absolute():
+        data_dir = project_root / data_dir
+
     train_loader, val_loader = get_dataloaders(
-        data_dir=config["data"]["data_dir"],
+        data_dir=str(data_dir),
         batch_size=config["training"]["batch_size"],
         num_workers=config["data"].get(
             "num_workers",
@@ -411,7 +399,7 @@ def main():
     )
 
     # ---------------------------------------------------------
-    # Optimizer and loss
+    # Optimizer/loss
     # ---------------------------------------------------------
 
     optimizer = torch.optim.Adam(
@@ -422,12 +410,17 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # ---------------------------------------------------------
-    # Output directory
+    # Output paths
     # ---------------------------------------------------------
 
     checkpoint_dir = Path(
         config["output"]["checkpoint_dir"]
     )
+
+    if not checkpoint_dir.is_absolute():
+        checkpoint_dir = (
+            project_root / checkpoint_dir
+        )
 
     checkpoint_dir.mkdir(
         parents=True,
@@ -435,11 +428,12 @@ def main():
     )
 
     metrics_history_path = (
-        checkpoint_dir / "metrics_history.json"
+        checkpoint_dir
+        / "metrics_history.json"
     )
 
     # ---------------------------------------------------------
-    # Training settings
+    # Training configuration
     # ---------------------------------------------------------
 
     epochs = config["training"]["epochs"]
@@ -448,9 +442,14 @@ def main():
         "early_stopping_patience"
     ]
 
+    resume_training = config["training"].get(
+        "resume",
+        False,
+    )
+
     checkpoint_every = config["output"].get(
         "checkpoint_every",
-        5,
+        1,
     )
 
     keep_last_checkpoints = config["output"].get(
@@ -459,9 +458,10 @@ def main():
     )
 
     # ---------------------------------------------------------
-    # State
+    # Training state
     # ---------------------------------------------------------
 
+    start_epoch = 0
     best_val_loss = float("inf")
     patience_counter = 0
 
@@ -470,10 +470,164 @@ def main():
     final_epoch = 0
 
     # ---------------------------------------------------------
+    # Resume from latest checkpoint
+    # ---------------------------------------------------------
+
+    if resume_training:
+        latest_checkpoint = find_latest_checkpoint(
+            checkpoint_dir
+        )
+
+        if latest_checkpoint is not None:
+            print(
+                json.dumps(
+                    {
+                        "event": "checkpoint_found",
+                        "path": str(
+                            latest_checkpoint
+                        ),
+                    }
+                ),
+                flush=True,
+            )
+
+            checkpoint = torch.load(
+                latest_checkpoint,
+                map_location=device,
+            )
+
+            model.load_state_dict(
+                checkpoint[
+                    "model_state_dict"
+                ]
+            )
+
+            optimizer.load_state_dict(
+                checkpoint[
+                    "optimizer_state_dict"
+                ]
+            )
+
+            start_epoch = checkpoint[
+                "epoch"
+            ]
+
+            best_val_loss = checkpoint.get(
+                "best_val_loss",
+                float("inf"),
+            )
+
+            patience_counter = checkpoint.get(
+                "patience_counter",
+                0,
+            )
+
+            # Restore metrics history.
+            metrics_history = load_json(
+                metrics_history_path,
+                [],
+            )
+
+            # Important:
+            # Only preserve metrics that correspond to
+            # completed epochs up to the checkpoint.
+            metrics_history = [
+                metric
+                for metric in metrics_history
+                if metric["epoch"]
+                <= start_epoch
+            ]
+
+            # Write the cleaned history back to disk.
+            save_json(
+                metrics_history,
+                metrics_history_path,
+            )
+
+            if metrics_history:
+                final_metrics = (
+                    metrics_history[-1]
+                )
+
+                final_epoch = (
+                    final_metrics["epoch"]
+                )
+
+            print(
+                json.dumps(
+                    {
+                        "event": "training_resumed",
+                        "checkpoint": str(
+                            latest_checkpoint
+                        ),
+                        "last_completed_epoch":
+                            start_epoch,
+                        "next_epoch":
+                            start_epoch + 1,
+                        "metrics_restored":
+                            len(metrics_history),
+                        "best_val_loss":
+                            round(
+                                best_val_loss,
+                                4,
+                            ),
+                        "patience_counter":
+                            patience_counter,
+                    }
+                ),
+                flush=True,
+            )
+
+        else:
+            print(
+                json.dumps(
+                    {
+                        "event":
+                            "no_checkpoint_found",
+                        "message":
+                            "Starting training from epoch 1",
+                    }
+                ),
+                flush=True,
+            )
+
+    # ---------------------------------------------------------
+    # Handle already-completed training
+    # ---------------------------------------------------------
+
+    if start_epoch >= epochs:
+        print(
+            json.dumps(
+                {
+                    "event":
+                        "training_already_complete",
+                    "checkpoint_epoch":
+                        start_epoch,
+                    "configured_epochs":
+                        epochs,
+                }
+            ),
+            flush=True,
+        )
+
+        if metrics_history:
+            plot_loss(
+                metrics_history,
+                checkpoint_dir,
+            )
+
+            plot_accuracy(
+                metrics_history,
+                checkpoint_dir,
+            )
+
+        return
+
+    # ---------------------------------------------------------
     # Training loop
     # ---------------------------------------------------------
 
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         current_epoch = epoch + 1
 
         train_loss, train_acc = train_one_epoch(
@@ -484,6 +638,7 @@ def main():
             device=device,
         )
 
+
         val_loss, val_acc = evaluate(
             model=model,
             loader=val_loader,
@@ -491,7 +646,6 @@ def main():
             device=device,
         )
 
-        # Metrics for current epoch.
         current_metrics = {
             "epoch": current_epoch,
             "train_loss": round(
@@ -512,21 +666,25 @@ def main():
             ),
         }
 
-        # Structured stdout logging.
+        # -----------------------------------------------------
+        # Log metrics to stdout as JSON Lines
+        # -----------------------------------------------------
+
         print(
-            json.dumps(current_metrics),
+            json.dumps(
+                current_metrics
+            ),
             flush=True,
         )
 
         # -----------------------------------------------------
-        # Metrics history
+        # Save per-epoch metrics
         # -----------------------------------------------------
 
         metrics_history.append(
             current_metrics
         )
 
-        # Save metrics after EVERY epoch.
         save_json(
             metrics_history,
             metrics_history_path,
@@ -566,13 +724,11 @@ def main():
                         "event": "best_model_saved",
                         "epoch": current_epoch,
                         "val_loss": round(
-                            val_loss,
-                            4,
-                        ),
-                        "path": str(
-                            checkpoint_dir
-                            / "best_model.pt"
-                        ),
+                                        val_loss,
+                                        4,
+                                    ),
+                        "model_path": str( checkpoint_dir / "best_model.pt" ),
+                        "metrics_path": str( checkpoint_dir / "best_metrics.json" ),
                     }
                 ),
                 flush=True,
@@ -609,9 +765,7 @@ def main():
                     {
                         "event": "checkpoint_saved",
                         "epoch": current_epoch,
-                        "path": str(
-                            checkpoint_path
-                        ),
+                        "path": str(checkpoint_path),
                     }
                 ),
                 flush=True,
@@ -631,6 +785,7 @@ def main():
                             best_val_loss,
                             4,
                         ),
+                        "patience": patience,
                     }
                 ),
                 flush=True,
@@ -657,10 +812,8 @@ def main():
                 {
                     "event": "final_model_saved",
                     "epoch": final_epoch,
-                    "path": str(
-                        checkpoint_dir
-                        / "final_model.pt"
-                    ),
+                    "model_path": str(checkpoint_dir/ "final_model.pt"),
+                    "metrics_path": str(checkpoint_dir/ "final_metrics.json"),
                 }
             ),
             flush=True,
@@ -707,21 +860,16 @@ def main():
             {
                 "event": "training_complete",
                 "epochs_completed": final_epoch,
+                "configured_epochs": epochs,
                 "best_val_loss": round(
-                    best_val_loss,
-                    4,
-                ),
-                "best_model": str(
-                    checkpoint_dir
-                    / "best_model.pt"
-                ),
-                "final_model": str(
-                    checkpoint_dir
-                    / "final_model.pt"
-                ),
-                "metrics_history": str(
-                    metrics_history_path
-                ),
+                                    best_val_loss,
+                                    4,
+                                  ),
+                "best_model": str(checkpoint_dir/ "best_model.pt"),
+                "best_metrics": str(checkpoint_dir/ "best_metrics.json"),
+                "final_model": str(checkpoint_dir/ "final_model.pt"),
+                "final_metrics": str(checkpoint_dir/ "final_metrics.json"),
+                "metrics_history": str(metrics_history_path),
             }
         ),
         flush=True,
@@ -730,4 +878,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
