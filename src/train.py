@@ -456,24 +456,73 @@ def main():
     keep_last_checkpoints = config["output"].get(
         "keep_last_checkpoints",
         2,
-    )
+
+
 
     # ---------------------------------------------------------
     # State
     # ---------------------------------------------------------
-
-    best_val_loss = float("inf")
-    patience_counter = 0
-
     metrics_history = []
     final_metrics = None
     final_epoch = 0
+
+    start_epoch = 0
+    best_val_loss = float("inf")
+    patience_counter = 0
+
+    latest_checkpoint = find_latest_checkpoint(
+        checkpoint_dir
+    )
+
+    if latest_checkpoint is not None:
+        print(
+            json.dumps({
+                "event": "checkpoint_found",
+                "path": str(latest_checkpoint),
+            }),
+            flush=True,
+        )
+
+        checkpoint = torch.load(
+            latest_checkpoint,
+            map_location=device,
+        )
+
+        model.load_state_dict(
+            checkpoint["model_state_dict"]
+        )
+
+        optimizer.load_state_dict(
+            checkpoint["optimizer_state_dict"]
+        )
+
+        start_epoch = checkpoint["epoch"]
+
+        best_val_loss = checkpoint.get(
+            "best_val_loss",
+            float("inf"),
+        )
+
+        patience_counter = checkpoint.get(
+            "patience_counter",
+            0,
+        )
+
+        print(
+            json.dumps({
+                "event": "training_resumed",
+                "checkpoint": str(latest_checkpoint),
+                "last_completed_epoch": start_epoch,
+                "next_epoch": start_epoch + 1,
+            }),
+            flush=True,
+        )
 
     # ---------------------------------------------------------
     # Training loop
     # ---------------------------------------------------------
 
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         current_epoch = epoch + 1
 
         train_loss, train_acc = train_one_epoch(
