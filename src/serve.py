@@ -1,18 +1,27 @@
+from contextlib import asynccontextmanager
 from io import BytesIO
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-
-from PIL import Image
-
-from fastapi import FastAPI, File, UploadFile, HTTPException
-
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from PIL import Image, UnidentifiedImageError
 from torchvision import transforms
 
-from model import build_model
+from model import get_model
 
 
-CHECKPOINT_PATH = "checkpoints/resnet18_cifar10.pth"
+# ---------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+CHECKPOINT_PATH = (
+    PROJECT_ROOT
+    / "checkpoints"
+    / "best_model.pt"
+)
 
 CLASS_NAMES = [
     "airplane",
@@ -24,86 +33,293 @@ CLASS_NAMES = [
     "frog",
     "horse",
     "ship",
-    "truck"
+    "truck",
 ]
 
+NUM_CLASSES = len(CLASS_NAMES)
+
 device = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
+    "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
 )
 
-app = FastAPI()
 
-model = build_model(10)
+# ---------------------------------------------------------
+# Image preprocessing
+# ---------------------------------------------------------
 
-try:
-    model.load_state_dict(
-        torch.load(
-            CHECKPOINT_PATH,
-            map_location=device
+# IMPORTANT:
+# These values must match dataset.py validation transforms.
+transform = transforms.Compose(
+    [
+        transforms.Resize((32, 32)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[
+                0.4914,
+                0.4822,
+                0.4465,
+            ],
+            std=[
+                0.2470,
+                0.2435,
+                0.2616,
+            ],
+        ),
+    ]
+)
+
+
+# ---------------------------------------------------------
+# Global model state
+# ---------------------------------------------------------
+
+model = None
+MODEL_LOADED = False
+MODEL_ERROR = None
+
+
+# ---------------------------------------------------------
+# Model loading
+# ---------------------------------------------------------
+
+def load_model():
+    global model
+    global MODEL_LOADED
+    global MODEL_ERROR
+
+    try:
+        if not CHECKPOINT_PATH.exists():
+            raise FileNotFoundError(
+                f"Checkpoint not found: {CHECKPOINT_PATH}"
+            )
+
+        # Build exactly the same architecture used during training.
+        model = get_model(
+            architecture="resnet18",
+            num_classes=NUM_CLASSES,
         )
-    )
 
-    model.to(device)
-    model.eval()
+        checkpoint = torch.load(
+            CHECKPOINT_PATH,
+            map_location=device,
+        )
 
-    MODEL_LOADED = True
+        # Your train.py saves a dictionary like:
+        #
+        # {
+        #   "epoch": ...,
+        #   "model_state_dict": ...,
+        #   "optimizer_state_dict": ...,
+        #   "metrics": ...,
+        #   "config": ...
+        # }
 
-except Exception:
-    MODEL_LOADED = False
+        if "model_state_dict" not in checkpoint:
+            raise ValueError(
+                "Checkpoint does not contain "
+                "'model_state_dict'"
+            )
+
+        model.load_state_dict(
+            checkpoint["model_state_dict"]
+        )
+
+        model.to(device)
+        model.eval()
+
+        MODEL_LOADED = True
+        MODEL_ERROR = None
+
+        print(
+            {
+                "event": "model_loaded",
+                "checkpoint": str(CHECKPOINT_PATH),
+                "device": str(device),
+                "epoch": checkpoint.get("epoch"),
+                "metrics": checkpoint.get("metrics"),
+            }
+        )
+
+    except Exception as exc:
+        model = None
+        MODEL_LOADED = False
+        MODEL_ERROR = str(exc)
+
+        print(
+            {
+                "event": "model_load_failed",
+                "error": MODEL_ERROR,
+            }
+        )
 
 
-transform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.4914, 0.4822, 0.4465],
-        std=[0.2023, 0.1994, 0.2010]
-    )
-])
+# ---------------------------------------------------------
+# FastAPI lifespan
+# ---------------------------------------------------------
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_model()
+
+    yield
+
+    # Optional cleanup.
+    global model
+
+    model = None
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+app = FastAPI(
+    title="CIFAR-10 Image Classifier",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+
+# ---------------------------------------------------------
+# Health endpoint
+# ---------------------------------------------------------
 
 @app.get("/health")
 def health():
     if not MODEL_LOADED:
         raise HTTPException(
-            status_code=500,
-            detail="Model not loaded"
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "model_loaded": False,
+                "error": MODEL_ERROR,
+            },
         )
 
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "model_loaded": True,
+        "device": str(device),
+        "checkpoint": str(CHECKPOINT_PATH),
+    }
 
+
+# ---------------------------------------------------------
+# Prediction endpoint
+# ---------------------------------------------------------
 
 @app.post("/predict")
 async def predict(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
 ):
-    if not MODEL_LOADED:
+    if not MODEL_LOADED or model is None:
         raise HTTPException(
-            status_code=500,
-            detail="Model unavailable"
+            status_code=503,
+            detail="Model is unavailable",
         )
 
-    image_bytes = await file.read()
+    # -----------------------------------------------------
+    # Validate file type
+    # -----------------------------------------------------
 
-    image = Image.open(
-        BytesIO(image_bytes)
-    ).convert("RGB")
+    if file.content_type is not None:
+        if not file.content_type.startswith("image/"):
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded file must be an image",
+            )
+
+    # -----------------------------------------------------
+    # Read image
+    # -----------------------------------------------------
+
+    try:
+        image_bytes = await file.read()
+
+        if not image_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded image is empty",
+            )
+
+        image = Image.open(
+            BytesIO(image_bytes)
+        ).convert("RGB")
+
+    except UnidentifiedImageError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or unsupported image",
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unable to read image: {exc}",
+        )
+
+    # -----------------------------------------------------
+    # Preprocess
+    # -----------------------------------------------------
 
     tensor = transform(image)
 
-    tensor = tensor.unsqueeze(0).to(device)
+    tensor = (
+        tensor
+        .unsqueeze(0)
+        .to(device)
+    )
 
-    with torch.no_grad():
-        outputs = model(tensor)
+    # -----------------------------------------------------
+    # Inference
+    # -----------------------------------------------------
 
-        probs = F.softmax(
-            outputs,
-            dim=1
-        )[0]
+    try:
+        with torch.inference_mode():
+            outputs = model(tensor)
+
+            probabilities = F.softmax(
+                outputs,
+                dim=1,
+            )[0]
+
+            predicted_index = int(
+                torch.argmax(probabilities).item()
+            )
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Inference failed: {exc}",
+        )
+
+    # -----------------------------------------------------
+    # Response
+    # -----------------------------------------------------
+
+    predictions = {
+        CLASS_NAMES[i]: round(
+            float(probabilities[i].item()),
+            6,
+        )
+        for i in range(NUM_CLASSES)
+    }
 
     return {
-        "predictions": {
-            CLASS_NAMES[i]: float(probs[i])
-            for i in range(len(CLASS_NAMES))
-        }
+        "predicted_class": CLASS_NAMES[
+            predicted_index
+        ],
+        "confidence": round(
+            float(
+                probabilities[
+                    predicted_index
+                ].item()
+            ),
+            6,
+        ),
+        "predictions": predictions,
     }
