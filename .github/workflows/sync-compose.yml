@@ -1,0 +1,46 @@
+name: Sync Compose File
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "compose.yaml"
+      - "requirements/**"
+
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Create project directory
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=no \
+            "${SSH_USERNAME}@${SSH_HOST}" \
+            "mkdir -p /home/da25m609/mlops_pytorch_project"
+
+      - name: Copy compose.yaml
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e scp \
+            -o StrictHostKeyChecking=no \
+            compose.yaml \
+            "${SSH_USERNAME}@${SSH_HOST}:/home/da25m609/mlops_pytorch_project/compose.yaml"

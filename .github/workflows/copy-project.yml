@@ -1,0 +1,66 @@
+name: Copy Project Files
+
+on:
+  workflow_dispatch:
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Create remote directories
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=no \
+            "${SSH_USERNAME}@${SSH_HOST}" \
+            "mkdir -p \
+              /home/da25m609/mlops_pytorch_project/src \
+              /home/da25m609/mlops_pytorch_project/configs \
+              /home/da25m609/mlops_pytorch_project/requirements \
+              /home/da25m609/mlops_pytorch_project/data \
+              /home/da25m609/mlops_pytorch_project/checkpoints"
+
+      - name: Copy source
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            src/ \
+            "${SSH_USERNAME}@${SSH_HOST}:/home/da25m609/mlops_pytorch_project/src/"
+
+      - name: Copy configs
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            configs/ \
+            "${SSH_USERNAME}@${SSH_HOST}:/home/da25m609/mlops_pytorch_project/configs/"
+
+      - name: Copy requirements
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            requirements/ \
+            "${SSH_USERNAME}@${SSH_HOST}:/home/da25m609/mlops_pytorch_project/requirements/"

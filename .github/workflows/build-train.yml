@@ -1,0 +1,48 @@
+name: Build Train Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docker/Dockerfile.train"
+      - "requirements/train.txt"
+
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: ghcr.io/rahul-ai-labs/mlops-train
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push train image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.train
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
