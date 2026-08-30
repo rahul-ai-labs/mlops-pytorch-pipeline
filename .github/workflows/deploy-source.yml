@@ -1,0 +1,56 @@
+name: Deploy Source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+
+  workflow_dispatch:
+
+jobs:
+  deploy-source:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SSH tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Create remote source directory
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=no \
+            "${SSH_USERNAME}@${SSH_HOST}" \
+            "mkdir -p /home/da25m609/mlops_pytorch_project/src"
+
+      - name: Copy source
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            src/ \
+            "${SSH_USERNAME}@${SSH_HOST}:/home/da25m609/mlops_pytorch_project/src/"
+
+      - name: Restart serve
+        env:
+          SSHPASS: ${{ secrets.SSH_PWD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        run: |
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=no \
+            "${SSH_USERNAME}@${SSH_HOST}" \
+            "cd /home/da25m609/mlops_pytorch_project && docker compose restart serve"
