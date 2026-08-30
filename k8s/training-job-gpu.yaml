@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: model-training
+  name: model-training-gpu
   namespace: ml-training
   labels:
-    app: model-training
+    app: model-training-gpu
 
 spec:
   backoffLimit: 1
@@ -12,7 +12,7 @@ spec:
   template:
     metadata:
       labels:
-        app: model-training
+        app: model-training-gpu
 
     spec:
       restartPolicy: Never
@@ -20,12 +20,11 @@ spec:
       containers:
         - name: train
           image: ghcr.io/rahul-ai-labs/mlops-train:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
 
           env:
             - name: CONFIG_PATH
               value: /app/configs/training_config.yaml
-
             - name: PYTHONPATH
               value: /app
 
@@ -33,9 +32,12 @@ spec:
             requests:
               cpu: "2"
               memory: "4Gi"
+              nvidia.com/gpu: "1"
+
             limits:
               cpu: "2"
               memory: "4Gi"
+              nvidia.com/gpu: "1"
 
           volumeMounts:
             - name: training-config
