@@ -4,7 +4,7 @@ networks:
 
 services:
   train:
-    image: ghcr.io/rahul-ai-labs/mlops-pytorch-train:latest
+    image: ghcr.io/rahul-ai-labs/mlops-train:latest
     container_name: mlops-rahul-pytorch-train
 
     environment:
@@ -24,9 +24,9 @@ services:
       - training
 
 
-  predict:
-    image: ghcr.io/rahul-ai-labs/mlops-pytorch-predict:latest
-    container_name: mlops-rahul-pytorch-predict
+  serve:
+    image: ghcr.io/rahul-ai-labs/mlops-serve:latest
+    container_name: mlops-rahul-pytorch-serve
 
     restart: unless-stopped
 
