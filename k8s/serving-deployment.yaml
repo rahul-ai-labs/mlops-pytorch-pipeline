@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-serving
+  namespace: ml-training
+  labels:
+    app: model-serving
+
+spec:
+  replicas: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: model-serving
+
+  template:
+    metadata:
+      labels:
+        app: model-serving
+
+    spec:
+      containers:
+        - name: serve
+          image: ghcr.io/rahul-ai-labs/mlops-serve:latest
+          imagePullPolicy: Always
+
+          env:
+            - name: PYTHONPATH
+              value: /app
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+
+            limits:
+              cpu: "1"
+              memory: "2Gi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            initialDelaySeconds: 15
+
+          volumeMounts:
+            - name: checkpoints
+              mountPath: /app/checkpoints
+              readOnly: true
+
+      volumes:
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: checkpoints-pvc
