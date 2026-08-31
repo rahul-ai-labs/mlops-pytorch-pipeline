@@ -978,32 +978,6 @@ Prediction:
 curl.exe -X POST http://localhost:8080/predict `
   -F "image=@test_image.jpg"
 ```
-
----
-
-# Evidence for Final Submission
-
-The final pull request should include terminal output or screenshots demonstrating:
-
-- successful Docker image builds
-- training container execution
-- JSONL training metrics
-- Kubernetes namespace creation
-- PVCs in `Bound` state
-- ConfigMap creation
-- training Job running/completing
-- training logs
-- checkpoint creation
-- two serving Pods running
-- successful Deployment rollout
-- liveness/readiness configuration
-- Service creation
-- HPA configuration
-- `/health` returning successfully
-- `/predict` returning model probabilities
-
----
-
 ## Summary
 
 This project demonstrates a complete ML lifecycle:
